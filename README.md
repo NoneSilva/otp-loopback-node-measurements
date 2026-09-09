@@ -1,7 +1,8 @@
 # otp-loopback-node-measurements
 
 Measurements behind a documentation change proposed to Erlang/OTP,
-"kernel: document how to bind a distributed node to loopback" (target
+"kernel: document how to bind a distributed node to loopback"
+([erlang/otp#11617](https://github.com/erlang/otp/pull/11617), target
 `maint`): with it, the `inet_dist_use_interface` entry of
 `lib/kernel/doc/kernel_app.md` explains how to make a distributed node accept
 connections only from the local host, what each of the involved settings does
