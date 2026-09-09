@@ -6,7 +6,10 @@
 #   default : --network host  (same interfaces and firewall as the host)
 #   --bridge: Docker's default bridge network, i.e. the container's own
 #             network namespace: no host firewall rules, no global IPv6
-set -eu
+#
+# The containers are throwaway (--rm), so MEASURE_EDIT_ETC=1 lets cases 8, 9
+# and 23 edit /etc/hosts and the resolver inside them. EPMD_PORT is forwarded.
+set -euo pipefail
 cd "$(dirname "$0")"
 MODE=host; NET=(--network host)
 if [ "${1:-}" = "--bridge" ]; then MODE=bridge; NET=(); shift; fi
@@ -15,5 +18,6 @@ mkdir -p results
 for V in "$@"; do
   OUT="results/otp$V-docker-$MODE.txt"
   echo "== erlang:$V ($MODE) -> $OUT"
-  docker run --rm "${NET[@]}" -v "$PWD/measure.sh:/measure.sh:ro" "erlang:$V" bash /measure.sh 2>&1 | tee "$OUT"
+  docker run --rm ${NET[@]+"${NET[@]}"} -e MEASURE_EDIT_ETC=1 -e EPMD_PORT="${EPMD_PORT:-4370}" \
+    -v "$PWD/measure.sh:/measure.sh:ro" "erlang:$V" bash /measure.sh 2>&1 | tee "$OUT"
 done

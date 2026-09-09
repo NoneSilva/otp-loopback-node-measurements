@@ -8,24 +8,28 @@
 # epmd on 4369 is never touched. Sockets are read from inside the BEAM
 # (inet:sockname/1 on the node's own ports, gen_tcp:connect/4 against epmd,
 # inet:getifaddrs/0 for the host addresses), so the only requirements are bash,
-# erl and epmd on PATH. Cases that edit /etc/hosts or /etc/resolv.conf run only
-# inside a throwaway container (see run-docker.sh).
+# erl and epmd on PATH. Cases 8, 9 and 23 edit /etc/hosts or the resolver; they
+# run only with MEASURE_EDIT_ETC=1 set inside a container, which run-docker.sh
+# does for its throwaway (--rm) containers, and the files are restored on exit.
 #
 # Usage: ./measure.sh          run every case
-#        ./measure.sh 5 19     run selected cases
+#        ./measure.sh 5 19     run selected cases (20 and 22 run with 19 and 21)
 set -u
 export ERL_EPMD_PORT="${EPMD_PORT:-4370}"
+[ "$ERL_EPMD_PORT" != 4369 ] || { echo "measure.sh: refusing to run on the system epmd port 4369; set EPMD_PORT" >&2; exit 2; }
 COOKIE="m$$"
 TMP="$(mktemp -d)"
 NODE_PIDS=()
 trap 'cleanup' EXIT
 
 cleanup() {
-  for p in "${NODE_PIDS[@]:-}"; do [ -n "$p" ] && kill "$p" 2>/dev/null; done
+  for p in ${NODE_PIDS[@]+"${NODE_PIDS[@]}"}; do kill "$p" 2>/dev/null; done
   wait 2>/dev/null
   epmd -kill >/dev/null 2>&1
+  for f in hosts resolv.conf nsswitch.conf; do [ -f "$TMP/etc.$f" ] && cat "$TMP/etc.$f" >"/etc/$f"; done
   rm -rf "$TMP"
 }
+backup_etc() { for f in hosts resolv.conf nsswitch.conf; do [ -f "$TMP/etc.$f" ] || cp "/etc/$f" "$TMP/etc.$f" 2>/dev/null; done; }
 
 say() { printf '%s\n' "$*"; }
 res() { printf '  -> %s\n' "$*"; }
@@ -64,7 +68,7 @@ ping_node() { local target=$1; shift; erl_eval "$@" -- "io:format(\"ping(~s) = ~
 remsh() {
   local target=$1; shift
   if command -v script >/dev/null 2>&1; then
-    local out; out=$(printf 'node().\n' | timeout 8 script -qec "erl -setcookie $COOKIE $* -remsh $target" /dev/null 2>&1 | tr -d '\r')
+    local out; out=$(printf 'node().\n' | TERM=xterm timeout 8 script -qec "erl -setcookie $COOKIE $* -remsh $target" /dev/null 2>&1 | tr -d '\r')
     local hit; hit=$(printf '%s' "$out" | grep -oE "\($target\)1> node\(\)\.|Could not connect[^*]*" | head -1)
     echo "interactive remsh: ${hit:-<prompt not captured through this pty; see connect_node line>}"
   else echo "interactive remsh: script(1) not available, not measured"; fi
@@ -77,6 +81,7 @@ epmd_probe() {
 }
 epmd_kill() { epmd -kill >/dev/null 2>&1; sleep 0.3; }
 in_container() { [ -f /.dockerenv ] && [ -w /etc/hosts ]; }
+may_edit_etc() { [ "${MEASURE_EDIT_ETC:-}" = 1 ] && in_container; }
 
 # ---- environment -------------------------------------------------------------
 say "environment"
@@ -92,7 +97,8 @@ IDUI6='-kernel inet_dist_use_interface {0,0,0,0,0,0,0,1}'
 
 want() { [ $# -eq 0 ] && return 0; local c; for c in "$@"; do [ "$c" = "$CASE" ] && return 0; done; return 1; }
 SELECTED=("$@")
-run_case() { CASE=$1; want "${SELECTED[@]}" || return 1; say; say "## $1. $2"; }
+for c in ${SELECTED[@]+"${SELECTED[@]}"}; do case $c in 20) SELECTED+=(19);; 22) SELECTED+=(21);; esac; done  # 20 and 22 are measured inside 19 and 21
+run_case() { CASE=$1; want ${SELECTED[@]+"${SELECTED[@]}"} || return 1; say; say "## $1. $2"; }
 
 # ---- listener binding ----------------------------------------------------------
 if run_case 1 "IPv4: -name alone"; then
@@ -124,14 +130,14 @@ sname_with_hosts_entry() { # ADDR CASE-LABEL : container only, rewrites the host
   start_node "${2}b" 6 -sname "${2}b"; res "unbound listener: $(listeners "${2}b"); $(client "$2b@$HOST" -sname p $IDUI4)"; stop_node $NODE_PID
 }
 if run_case 8 "-sname where the hostname maps to 127.0.1.1 (Debian style; container only)"; then
-  if in_container; then cp /etc/hosts "$TMP/hosts.orig"; sname_with_hosts_entry 127.0.1.1 c8; cat "$TMP/hosts.orig" >/etc/hosts; else res "not measured: only inside a container (would edit /etc/hosts)"; fi; fi
+  if may_edit_etc; then backup_etc; sname_with_hosts_entry 127.0.1.1 c8; cat "$TMP/etc.hosts" >/etc/hosts; else res "not measured: only with MEASURE_EDIT_ETC=1 inside a throwaway container (edits /etc/hosts)"; fi; fi
 if run_case 9 "-sname where the hostname maps to the non-loopback IPv4 address (container only)"; then
-  if in_container && [ "$V4" != "-" ]; then cp /etc/hosts "$TMP/hosts.orig"; sname_with_hosts_entry "$V4" c9; cat "$TMP/hosts.orig" >/etc/hosts; else res "not measured: only inside a container with a non-loopback IPv4 address"; fi; fi
+  if may_edit_etc && [ "$V4" != "-" ]; then backup_etc; sname_with_hosts_entry "$V4" c9; cat "$TMP/etc.hosts" >/etc/hosts; else res "not measured: only with MEASURE_EDIT_ETC=1 inside a throwaway container with a non-loopback IPv4 address (edits /etc/hosts)"; fi; fi
 if run_case 10 "-sname node@localhost + loopback listener; plain erl -remsh node@localhost"; then
   start_node c10 20 -sname c10@localhost $IDUI4; res "listeners: $(listeners c10)"; res "$(client c10@localhost -sname undefined)"; res "$(remsh c10@localhost)"; stop_node $NODE_PID; fi
 
 # ---- the shell node --------------------------------------------------------------
-if run_case 11 "recipe node; bare 'erl -remsh mynode@127.0.0.1' (a short-named client)"; then
+if run_case 11 "recipe node; plain 'erl -remsh mynode@127.0.0.1' (a short-named client)"; then
   epmd_kill; start_node c11 20 -name mynode@127.0.0.1 $IDUI4 -env ERL_EPMD_ADDRESS 127.0.0.1; res "listeners: $(listeners c11)"
   res "$(client mynode@127.0.0.1 -sname undefined)"; res "$(remsh mynode@127.0.0.1)"; stop_node $NODE_PID; fi
 if run_case 12 "recipe node; 'erl -name shell@127.0.0.1 -remsh mynode@127.0.0.1' (client listens on all interfaces)"; then
@@ -150,7 +156,7 @@ if run_case 16 "fresh epmd with ERL_EPMD_ADDRESS=::1"; then
   epmd_kill; ERL_EPMD_ADDRESS=::1 epmd -daemon; sleep 0.5; res "$(epmd_probe "${PROBE_ADDRS[@]}")"; fi
 if run_case 17 "epmd already running on all interfaces; node started with -env ERL_EPMD_ADDRESS 127.0.0.1"; then
   epmd_kill; epmd -daemon; sleep 0.5; res "before: $(epmd_probe "${PROBE_ADDRS[@]}")"
-  start_node c17 6 -name c17@127.0.0.1 -env ERL_EPMD_ADDRESS 127.0.0.1; res "node started: $(listeners c17); output: [$(tr '\n' ' ' <"$TMP/c17.out")]"; res "after:  $(epmd_probe "${PROBE_ADDRS[@]}")"; stop_node $NODE_PID; fi
+  start_node c17 6 -name c17@127.0.0.1 $IDUI4 -env ERL_EPMD_ADDRESS 127.0.0.1; res "node started, listeners: $(listeners c17); output: [$(tr '\n' ' ' <"$TMP/c17.out")]"; res "after:  $(epmd_probe "${PROBE_ADDRS[@]}")"; stop_node $NODE_PID; fi
 if run_case 18 "'epmd -address 127.0.0.1 -daemon' started by hand before the node"; then
   epmd_kill; epmd -address 127.0.0.1 -daemon; sleep 0.5; res "$(epmd_probe "${PROBE_ADDRS[@]}")"
   start_node c18 6 -name c18@127.0.0.1 $IDUI4; res "node listeners: $(listeners c18); $(client c18@127.0.0.1 -name shell@127.0.0.1 -dist_listen false)"; stop_node $NODE_PID; fi
@@ -158,7 +164,7 @@ if run_case 18 "'epmd -address 127.0.0.1 -daemon' started by hand before the nod
 # ---- only incoming connections are restricted ---------------------------------------
 if run_case 19 "loopback-bound node connects OUT to a peer named on the non-loopback address; peer runs code back"; then
   if [ "$V4" = "-" ]; then res "not measured: no non-loopback IPv4 address here"; else
-  epmd_kill; epmd -daemon; sleep 0.5; start_node c19peer 12 -name "other@$V4"
+  epmd_kill; epmd -daemon; sleep 0.5; start_node c19peer 12 -name "other@$V4"; res "peer listeners [$(listeners c19peer)]"
   erl_eval -name mynode@127.0.0.1 $IDUI4 -- "B = 'other@$V4', C = net_kernel:connect_node(B), Back = rpc:call(B, rpc, call, [node(), os, getpid, []]), S = [{element(2, inet:sockname(P)), element(2, inet:peername(P))} || P <- erlang:ports(), erlang:port_info(P, name) == {name, \"tcp_inet\"}, element(1, inet:peername(P)) == ok, element(2, element(2, inet:peername(P))) =/= list_to_integer(os:getenv(\"ERL_EPMD_PORT\"))], io:format(\"  -> my listeners [~s]~n  -> connect_node(~s) = ~w~n  -> peer rpc:call back into me = ~p, my os pid = ~s~n  -> dist socket {local, peer} = ~w~n\", [$LISTENERS, B, C, Back, os:getpid(), S]), true = net_kernel:disconnect(B), ok = net_kernel:allow(['nobody@127.0.0.1']), io:format(\"  -> [case 20] after net_kernel:allow/1: connect_node(~s) = ~w~n\", [B, net_kernel:connect_node(B)])" | grep -- '->'
   stop_node $NODE_PID; fi; fi
 if run_case 20 "(measured inside case 19) net_kernel:allow/1 blocks the outgoing connection"; then res "see case 19"; fi
@@ -177,11 +183,13 @@ if run_case 24 "extra: inet_dist_use_interface loopback (atom; documented type i
 
 # ---- last: resolver fallback (kills DNS in the container) -------------------------------
 if run_case 23 "-sname where the hostname is in neither /etc/hosts nor DNS (Erlang's own-hostname fallback; container only, last)"; then
-  if in_container; then
+  if may_edit_etc; then
+    backup_etc
     grep -vE "[[:space:]]$HOST([[:space:]]|$)" /etc/hosts >"$TMP/hosts" && cat "$TMP/hosts" >/etc/hosts
     printf 'nameserver 127.0.0.2\noptions timeout:1 attempts:1\n' >/etc/resolv.conf; sed -i 's/^hosts:.*/hosts: files dns/' /etc/nsswitch.conf 2>/dev/null
     res "getent hosts $HOST: $(getent hosts "$HOST" 2>/dev/null || echo '<none>'); inet:getaddr = $(erl_eval -- "io:format(\"~w\", [inet:getaddr(\"$HOST\", inet)])" | tail -1); inet:gethostbyname_self = $(erl_eval -- "io:format(\"~w\", [inet:gethostbyname_self(\"$HOST\", inet)])" | tail -1)"
     epmd_kill; start_node c23 6 -sname c23 $IDUI4; res "loopback listener: $(listeners c23); $(client "c23@$HOST" -sname p $IDUI4)"; stop_node $NODE_PID
-  else res "not measured: only inside a container (would edit /etc/hosts and /etc/resolv.conf)"; fi; fi
+    res "/etc/hosts, /etc/resolv.conf and /etc/nsswitch.conf are restored by the cleanup trap"
+  else res "not measured: only with MEASURE_EDIT_ETC=1 inside a throwaway container (edits /etc/hosts and the resolver)"; fi; fi
 
 say; say "done; private epmd stopped, nodes stopped"
