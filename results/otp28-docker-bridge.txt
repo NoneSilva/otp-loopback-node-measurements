@@ -1,57 +1,57 @@
 environment
-  -> OTP 27 erts-15.2.7.13 x86_64-pc-linux-gnu
-  -> non-loopback IPv4: 172.17.0.2, global IPv6: -, short hostname: 91ca13af2db3
+  -> OTP 28 erts-16.4.0.6 x86_64-pc-linux-gnu
+  -> non-loopback IPv4: 172.17.0.2, global IPv6: -, short hostname: 97a3fafa3a51
   -> hostname resolves to: {ok,{172,17,0,2}}; localhost (inet/inet6): {ok,{127,0,0,1}} / {ok,{0,0,0,0,0,0,0,1}}
   -> private epmd port: 4370; in container: yes
 
 ## 1. IPv4: -name alone
-  -> listeners: 0.0.0.0:36295
+  -> listeners: 0.0.0.0:39119
 
 ## 2. IPv6: -proto_dist inet6_tcp -name alone
-  -> listeners: :::37811
+  -> listeners: :::44039
 
 ## 3. IPv4: -name + inet_dist_use_interface {127,0,0,1}; local node with the cookie connects
-  -> listeners: 127.0.0.1:43877
+  -> listeners: 127.0.0.1:41701
   -> ping(c3@127.0.0.1) = pong
 
 ## 4. IPv6: -name + inet_dist_use_interface {0,0,0,0,0,0,0,1}; local IPv6 node connects
-  -> listeners: ::1:37597
+  -> listeners: ::1:45303
   -> ping(c4@::1) = pong
 
 ## 5. IPv4: name resolves to the non-loopback address, listener on loopback (control: unbound listener)
-  -> loopback listener: 127.0.0.1:35375; ping(c5@172.17.0.2) = pang
-  -> unbound listener: 0.0.0.0:44463; ping(c5b@172.17.0.2) = pong
+  -> loopback listener: 127.0.0.1:38871; ping(c5@172.17.0.2) = pang
+  -> unbound listener: 0.0.0.0:36307; ping(c5b@172.17.0.2) = pong
 
 ## 6. IPv6: name resolves to the global IPv6 address, listener on ::1 (control: unbound listener)
   -> not measured: no global IPv6 address here
 
 ## 7. -sname with the hostname as it resolves on this machine, loopback listener, -sname client
-  -> hostname 91ca13af2db3 resolves to {ok,{172,17,0,2}}
-  -> loopback listener: 127.0.0.1:38541; connect_node(c7@91ca13af2db3) = false, client listeners [127.0.0.1:33887]
-  -> unbound listener: 0.0.0.0:34069; connect_node(c7b@91ca13af2db3) = true, client listeners [127.0.0.1:44907]
+  -> hostname 97a3fafa3a51 resolves to {ok,{172,17,0,2}}
+  -> loopback listener: 127.0.0.1:35691; connect_node(c7@97a3fafa3a51) = false, client listeners [127.0.0.1:44455]
+  -> unbound listener: 0.0.0.0:41305; connect_node(c7b@97a3fafa3a51) = true, client listeners [127.0.0.1:39395]
 
 ## 8. -sname where the hostname maps to 127.0.1.1 (Debian style; container only)
-  -> /etc/hosts now maps 91ca13af2db3 to 127.0.1.1; inet:getaddr = {ok,{127,0,1,1}}
-  -> loopback listener: 127.0.0.1:43495; connect_node(c8@91ca13af2db3) = false, client listeners [127.0.0.1:42551]
-  -> unbound listener: 0.0.0.0:43939; connect_node(c8b@91ca13af2db3) = true, client listeners [127.0.0.1:42029]
+  -> /etc/hosts now maps 97a3fafa3a51 to 127.0.1.1; inet:getaddr = {ok,{127,0,1,1}}
+  -> loopback listener: 127.0.0.1:38083; connect_node(c8@97a3fafa3a51) = false, client listeners [127.0.0.1:34745]
+  -> unbound listener: 0.0.0.0:42935; connect_node(c8b@97a3fafa3a51) = true, client listeners [127.0.0.1:35573]
 
 ## 9. -sname where the hostname maps to the non-loopback IPv4 address (container only)
-  -> /etc/hosts now maps 91ca13af2db3 to 172.17.0.2; inet:getaddr = {ok,{172,17,0,2}}
-  -> loopback listener: 127.0.0.1:34433; connect_node(c9@91ca13af2db3) = false, client listeners [127.0.0.1:39135]
-  -> unbound listener: 0.0.0.0:45495; connect_node(c9b@91ca13af2db3) = true, client listeners [127.0.0.1:42875]
+  -> /etc/hosts now maps 97a3fafa3a51 to 172.17.0.2; inet:getaddr = {ok,{172,17,0,2}}
+  -> loopback listener: 127.0.0.1:44425; connect_node(c9@97a3fafa3a51) = false, client listeners [127.0.0.1:38451]
+  -> unbound listener: 0.0.0.0:46045; connect_node(c9b@97a3fafa3a51) = true, client listeners [127.0.0.1:36151]
 
 ## 10. -sname node@localhost + loopback listener; plain erl -remsh node@localhost
-  -> listeners: 127.0.0.1:45321
+  -> listeners: 127.0.0.1:44823
   -> connect_node(c10@localhost) = true, client listeners []
   -> interactive remsh: (c10@localhost)1> node().
 
 ## 11. recipe node; plain 'erl -remsh mynode@127.0.0.1' (a short-named client)
-  -> listeners: 127.0.0.1:36747
+  -> listeners: 127.0.0.1:43589
   -> connect_node(mynode@127.0.0.1) = false, client listeners []
   -> interactive remsh: Could not connect to "mynode@127.0.0.1"
 
 ## 12. recipe node; 'erl -name shell@127.0.0.1 -remsh mynode@127.0.0.1' (client listens on all interfaces)
-  -> connect_node(mynode@127.0.0.1) = true, client listeners [0.0.0.0:43227]
+  -> connect_node(mynode@127.0.0.1) = true, client listeners [0.0.0.0:38175]
   -> interactive remsh: (mynode@127.0.0.1)1> node().
 
 ## 13. recipe node; 'erl -name shell@127.0.0.1 -dist_listen false -remsh mynode@127.0.0.1' (the documented shell)
@@ -59,11 +59,11 @@ environment
   -> interactive remsh: (mynode@127.0.0.1)1> node().
 
 ## 14. epmd started by the node, no ERL_EPMD_ADDRESS (node listener still on loopback)
-  -> node listeners: 127.0.0.1:44639
+  -> node listeners: 127.0.0.1:43247
   -> epmd 127.0.0.1=answers ::1=answers 172.17.0.2=answers
 
 ## 15. epmd started by the node with -env ERL_EPMD_ADDRESS 127.0.0.1
-  -> node listeners: 127.0.0.1:45343
+  -> node listeners: 127.0.0.1:40173
   -> epmd 127.0.0.1=answers ::1=answers 172.17.0.2=econnrefused
 
 ## 16. fresh epmd with ERL_EPMD_ADDRESS=::1
@@ -71,26 +71,26 @@ environment
 
 ## 17. epmd already running on all interfaces; node started with -env ERL_EPMD_ADDRESS 127.0.0.1
   -> before: epmd 127.0.0.1=answers ::1=answers 172.17.0.2=answers
-  -> node started, listeners: 127.0.0.1:44479; output: []
+  -> node started, listeners: 127.0.0.1:33977; output: []
   -> after:  epmd 127.0.0.1=answers ::1=answers 172.17.0.2=answers
 
 ## 18. 'epmd -address 127.0.0.1 -daemon' started by hand before the node
   -> epmd 127.0.0.1=answers ::1=answers 172.17.0.2=econnrefused
-  -> node listeners: 127.0.0.1:45985; connect_node(c18@127.0.0.1) = true, client listeners []
+  -> node listeners: 127.0.0.1:36391; connect_node(c18@127.0.0.1) = true, client listeners []
 
 ## 19. loopback-bound node connects OUT to a peer named on the non-loopback address; peer runs code back
-  -> peer listeners [0.0.0.0:36383]
-  -> my listeners [127.0.0.1:37825]
+  -> peer listeners [0.0.0.0:37009]
+  -> my listeners [127.0.0.1:36597]
   -> connect_node(other@172.17.0.2) = true
-  -> peer rpc:call back into me = "2938", my os pid = 2938
-  -> dist socket {local, peer} = [{{{172,17,0,2},60204},{{172,17,0,2},36383}}]
+  -> peer rpc:call back into me = "2944", my os pid = 2944
+  -> dist socket {local, peer} = [{{{172,17,0,2},42956},{{172,17,0,2},37009}}]
   -> [case 20] after net_kernel:allow/1: connect_node(other@172.17.0.2) = false
 
 ## 20. (measured inside case 19) net_kernel:allow/1 blocks the outgoing connection
   -> see case 19
 
 ## 21. IPv6 example verbatim: -proto_dist inet6_tcp -name mynode@::1, {0,0,0,0,0,0,0,1}, -env ERL_EPMD_ADDRESS ::1 (case 22 follows on the same node)
-  -> node listeners: ::1:39303
+  -> node listeners: ::1:43349
   -> epmd 127.0.0.1=answers ::1=answers 172.17.0.2=econnrefused
 
 ## 22. IPv6 shell: -proto_dist inet6_tcp -name shell@::1 -dist_listen false -remsh mynode@::1; an IPv4-carrier client
@@ -99,12 +99,12 @@ environment
   -> IPv4-carrier client: connect_node(mynode@::1) = false, client listeners []
 
 ## 24. extra: inet_dist_use_interface loopback (atom; documented type is ip_address() only)
-  -> inet_tcp:  127.0.0.1:37773
-  -> inet6_tcp: ::1:42373
+  -> inet_tcp:  127.0.0.1:45707
+  -> inet6_tcp: ::1:46603
 
 ## 23. -sname where the hostname is in neither /etc/hosts nor DNS (Erlang's own-hostname fallback; container only, last)
-  -> getent hosts 91ca13af2db3: <none>; inet:getaddr = {ok,{127,0,0,1}}; inet:gethostbyname_self = {ok,{hostent,[57,49,99,97,49,51,97,102,50,100,98,51],[],inet,4,[{127,0,0,1}]}}
-  -> loopback listener: 127.0.0.1:43699; connect_node(c23@91ca13af2db3) = true, client listeners [127.0.0.1:32861]
+  -> getent hosts 97a3fafa3a51: <none>; inet:getaddr = {ok,{127,0,0,1}}; inet:gethostbyname_self = {ok,{hostent,[57,55,97,51,102,97,102,97,51,97,53,49],[],inet,4,[{127,0,0,1}]}}
+  -> loopback listener: 127.0.0.1:39651; connect_node(c23@97a3fafa3a51) = true, client listeners [127.0.0.1:38003]
   -> /etc/hosts, /etc/resolv.conf and /etc/nsswitch.conf are restored by the cleanup trap
 
 done; private epmd stopped, nodes stopped

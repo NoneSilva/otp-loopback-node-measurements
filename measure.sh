@@ -17,7 +17,8 @@
 set -u
 export ERL_EPMD_PORT="${EPMD_PORT:-4370}"
 [ "$ERL_EPMD_PORT" != 4369 ] || { echo "measure.sh: refusing to run on the system epmd port 4369; set EPMD_PORT" >&2; exit 2; }
-COOKIE="m$$"
+# random per run: the control rows listen on every interface for a few seconds
+COOKIE=$(erl -noshell -eval 'io:format("~s", [binary:encode_hex(crypto:strong_rand_bytes(16))]), halt().')
 TMP="$(mktemp -d)"
 NODE_PIDS=()
 trap 'cleanup' EXIT
@@ -80,7 +81,7 @@ epmd_probe() {
   erl_eval -- "P = list_to_integer(os:getenv(\"ERL_EPMD_PORT\")), F = fun(S) -> {ok, A} = inet:parse_address(S), Fam = case tuple_size(A) of 4 -> inet; 8 -> inet6 end, R = case gen_tcp:connect(A, P, [Fam], 500) of {ok, So} -> gen_tcp:close(So), \"answers\"; {error, E} -> atom_to_list(E) end, io_lib:format(\"~s=~s\", [S, R]) end, io:format(\"epmd ~s~n\", [string:join([F(S) || S <- $list], \" \")])" | tail -1
 }
 epmd_kill() { epmd -kill >/dev/null 2>&1; sleep 0.3; }
-in_container() { [ -f /.dockerenv ] && [ -w /etc/hosts ]; }
+in_container() { { [ -f /.dockerenv ] || [ -f /run/.containerenv ]; } && [ -w /etc/hosts ]; }
 may_edit_etc() { [ "${MEASURE_EDIT_ETC:-}" = 1 ] && in_container; }
 
 # ---- environment -------------------------------------------------------------

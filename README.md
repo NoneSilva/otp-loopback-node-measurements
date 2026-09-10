@@ -14,6 +14,12 @@ measured.
 Companion write-up of the case that motivated it (VS Code Erlang extension,
 GHSA-573p-mcvv-hchg): <https://erts-sched.github.io/security/vscode-erlang-loopback-rce/>
 
+Companions: [otp-dist-tls-measurements](https://github.com/erts-sched/otp-dist-tls-measurements)
+(what `-proto_dist inet_tls` protects, and that it does not change the bind)
+and [elixir-ls-mcp-bind-measurements](https://github.com/erts-sched/elixir-ls-mcp-bind-measurements)
+(the same bind question for the elixir-ls MCP server,
+[elixir-lsp/elixir-ls#1275](https://github.com/elixir-lsp/elixir-ls/pull/1275)).
+
 ## Run it
 
 Requirements: `bash` 4.4+, `erl` and `epmd` on `PATH`, and a GNU/Linux
@@ -23,7 +29,8 @@ BEAM (`inet:sockname/1`, `gen_tcp:connect/4` against `epmd`,
 `inet:getifaddrs/0`), not with `ss` or `ip`. A private `epmd` on port 4370
 (`EPMD_PORT` to change; 4369 is refused) is used throughout, so a system `epmd`
 is never touched; every node and the private `epmd` are stopped by the cleanup
-trap, also on Ctrl-C.
+trap, also on Ctrl-C. The cookie is random per run, since the control rows
+listen on every interface for a few seconds.
 
 ```text
 ./measure.sh                 # every case, on the local OTP
@@ -36,6 +43,8 @@ Cases 8, 9 and 23 edit `/etc/hosts` or the resolver (`/etc/resolv.conf`,
 `/etc/nsswitch.conf`). They run only with `MEASURE_EDIT_ETC=1` set inside a
 container, which `run-docker.sh` sets for its throwaway (`--rm`) containers,
 and the files are restored on exit; anywhere else they print "not measured".
+Case 23 runs last, after case 24, because it disables the resolver for the rest
+of the run.
 An interactive remote shell (`-remsh`) is exercised through a pty when
 `script(1)` exists, with `TERM=xterm` (without a terminal type `erl` falls back
 to the old shell, which does not echo the typed line the script looks for);
@@ -46,12 +55,15 @@ otherwise only the equivalent `net_kernel:connect_node/1` is reported.
 Within each environment, results were identical across OTP 27.3.4.17
 (erts 15.2.7.13; host and the `erlang:27` image), OTP 28.5.0.6
 (erts 16.4.0.6) and OTP 29.0.6 (erts 17.0.6, the version of the `maint`
-branch), the latter two in the official Docker images. The outputs print the
+branch), the latter two in the official Docker images, in both network modes.
+The outputs print the
 major release and the erts version; the erts version identifies the patch
 release (`otp_versions.table` in the OTP repository). Row 7 depends on the
 environment (see its cell), and rows an environment cannot run print
 "not measured". Outputs are in [`results/`](results/), verbatim except that
-the host's global IPv6 address is written `<global IPv6>`.
+the host's global IPv6 address, the only routable address in them, is written
+`<global IPv6>`; the LAN address `10.0.0.203` and the hostname `one` are
+private to the lab and left as printed.
 
 Terms used in the table. `P` is the node's distribution port. "Loopback
 listener" means the node was started with `inet_dist_use_interface` set to
@@ -101,15 +113,14 @@ replace the cookie. Row 24 is not used in the text.
 
 - Host: Linux, `ufw` active, hostname mapped to `127.0.0.1` in `/etc/hosts`,
   LAN IPv4 and a global IPv6 address, IPv6 enabled. OTP 27 from the operating
-  system's packages. Facts in this list that the script does not print (`ufw`,
-  nftables, package origin) were checked by hand (`ufw status`,
-  `nft list tables`) and are not in `results/`.
+  system's packages. Facts in this line that the script does not print (`ufw`,
+  package origin) were checked by hand (`ufw status`) and are not in
+  `results/`.
 - `run-docker.sh 27 28 29`: official images with `--network host`, so the same
   interfaces, addresses and firewall as the host.
-- `run-docker.sh --bridge 29 27`: the container's own network namespace
-  (`172.17.0.0/16`, zero nftables tables, no global IPv6). This is the
-  environment without the host's security rules; row 6 prints "not measured"
-  there.
+- `run-docker.sh --bridge 27 28 29`: the container's own network namespace
+  (`172.17.0.0/16`, no global IPv6), where the host's `ufw`/nftables rules do
+  not apply; row 6 prints "not measured" there.
 
 Every "refused" row has a control on the same path that succeeds (5, 6, 8, 9,
 and 7 in the bridge run: the same name with an unbound listener connects, over
@@ -130,7 +141,11 @@ host rules exist.
 - `-sname n@localhost` over IPv6: no case runs it. `inet:getaddr("localhost",
   inet6)` returned `nxdomain` on the host and `::1` in the bridge containers,
   which is itself a reason the documented IPv6 example uses the literal `::1`.
-- Other distribution carriers (`inet_tls_dist`, custom `-proto_dist` modules).
+- Custom `-proto_dist` modules. What `inet_tls_dist` does and does not protect
+  (the client certificate authenticates before the cookie; the listener stays
+  on `0.0.0.0`; `inet_dist_use_interface` applies to it unchanged) is measured
+  in the companion
+  [otp-dist-tls-measurements](https://github.com/erts-sched/otp-dist-tls-measurements).
 - Versions before OTP 27. The entry uses two features from OTP 23.0:
   `-dist_listen false` (the documented shell command) and `-remsh` without
   `-name` or `-sname` (the plain `erl -remsh n@localhost` and the "starts a
