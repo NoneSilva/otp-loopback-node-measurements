@@ -7,7 +7,7 @@ Measurements behind a documentation change proposed to Erlang/OTP,
 `lib/kernel/doc/kernel_app.md` explains how to make a distributed node accept
 connections only from the local host, what each of the involved settings does
 and does not do, and how to open a shell on such a node. This repository holds
-the script that produced every row behind that text, the captured outputs per
+the script that produces every row behind that text, the captured outputs per
 OTP version and network setup, and the list of what was deliberately not
 measured.
 
@@ -22,33 +22,38 @@ and [elixir-ls-mcp-bind-measurements](https://github.com/NoneSilva/elixir-ls-mcp
 
 ## Run it
 
-Requirements: `bash` 4.4+, `erl` and `epmd` on `PATH`, and a GNU/Linux
-userland (`timeout`, `mktemp`; util-linux `script(1)` for the interactive
-remote-shell rows, optional). Nothing else: sockets are read from inside the
-BEAM (`inet:sockname/1`, `gen_tcp:connect/4` against `epmd`,
+Requirements: `escript`, `erl` and `epmd` on `PATH`, and a GNU/Linux userland
+(coreutils `timeout` for the remote-shell rows, glibc `getent` for row 23;
+`bash` and Docker for `run-docker.sh` only). The script is Erlang: the nodes
+are peers from the OTP `peer` module, ports owned by the script's VM and
+controlled over their standard I/O, and everything is read from inside the
+BEAM (`inet:sockname/1` for the listeners, `gen_tcp:connect/4` against `epmd`,
 `inet:getifaddrs/0`), not with `ss` or `ip`. A private `epmd` on port 4370
 (`EPMD_PORT` to change; 4369 is refused) is used throughout, so a system `epmd`
-is never touched; every node and the private `epmd` are stopped by the cleanup
-trap, also on Ctrl-C. The cookie is random per run, since the control rows
-listen on every interface for a few seconds.
+is never touched; each node is stopped when its case ends and the private
+`epmd` at the end of the run (its own `KILL_REQ`, what `epmd -kill` sends).
+The cookie is random per run, since the control rows listen on every interface
+for a few seconds.
 
 ```text
-./measure.sh                 # every case, on the local OTP
-./measure.sh 5 19            # selected cases (20 and 22 run with 19 and 21)
-./run-docker.sh 27 28 29     # official erlang:<v> images, --network host
-./run-docker.sh --bridge 29  # same, in the container's own network namespace
+escript measure.escript        # every case, on the local OTP
+escript measure.escript 5 19   # selected cases (20 and 22 run with 19 and 21)
+./run-docker.sh 27 28 29       # official erlang:<v> images, --network host
+./run-docker.sh --bridge 29    # same, in the container's own network namespace
 ```
 
 Cases 8, 9 and 23 edit `/etc/hosts` or the resolver (`/etc/resolv.conf`,
 `/etc/nsswitch.conf`). They run only with `MEASURE_EDIT_ETC=1` set inside a
 container, which `run-docker.sh` sets for its throwaway (`--rm`) containers,
-and the files are restored on exit; anywhere else they print "not measured".
-Case 23 runs last, after case 24, because it disables the resolver for the rest
-of the run.
-An interactive remote shell (`-remsh`) is exercised through a pty when
-`script(1)` exists, with `TERM=xterm` (without a terminal type `erl` falls back
-to the old shell, which does not echo the typed line the script looks for);
-otherwise only the equivalent `net_kernel:connect_node/1` is reported.
+and the files are restored when the script ends; anywhere else they print
+"not measured". Case 23 runs last, after case 24, because it disables the
+resolver for the rest of the run.
+The remote-shell rows start a real `erl -remsh` with `open_port/2`, its
+standard input a pipe carrying the line `node().`; the prompt and the value
+the shell prints are reported next to the equivalent
+`net_kernel:connect_node/1`. Whatever a node prints on its own standard output
+or error is reported after it stops ("node output", "client output"); rows 11
+and 20 show the reports behind their refusals.
 
 ## Cases and results
 
@@ -87,7 +92,7 @@ without that parameter, whose listener is then bound to the wildcard address
 | 8 | `-sname n` where the hostname maps to `127.0.1.1` (Debian style) + loopback listener; control: unbound | `false`; control `true` |
 | 9 | `-sname n` where the hostname maps to the LAN IPv4 address + loopback listener; control: unbound | `false`; control `true` |
 | 10 | `-sname n@localhost` + loopback listener; plain `erl -remsh n@localhost` | remote prompt `(n@localhost)1>`; `localhost` → `127.0.0.1` |
-| 11 | recipe node; plain `erl -remsh mynode@127.0.0.1` (a short-named client) | `Could not connect`; `-sname undefined` client → `false` |
+| 11 | recipe node; plain `erl -remsh mynode@127.0.0.1` (a short-named client) | `Could not connect`; `-sname undefined` client → `false`, reporting `Hostname 127.0.0.1 is illegal` |
 | 12 | recipe node; `erl -name shell@127.0.0.1 -remsh mynode@127.0.0.1` | remote prompt; but the shell node listens on `0.0.0.0:P` |
 | 13 | recipe node; `erl -name shell@127.0.0.1 -dist_listen false -remsh mynode@127.0.0.1` | remote prompt; the shell node has no listening socket |
 | 14 | `epmd` started by the node, no `ERL_EPMD_ADDRESS` | `epmd` answers on `127.0.0.1`, `::1`, the LAN IPv4 and the global IPv6 address; the node's listener is still `127.0.0.1:P` |
@@ -96,7 +101,7 @@ without that parameter, whose listener is then bound to the wildcard address
 | 17 | `epmd` already running on all interfaces; node started with the loopback listener and `-env ERL_EPMD_ADDRESS 127.0.0.1` | `epmd` unchanged (still answers everywhere); the node starts and registers with no output, its listener is `127.0.0.1:P` |
 | 18 | `epmd -address 127.0.0.1 -daemon` by hand, then the node | answers on `127.0.0.1` and `::1` only; the node registers; a loopback client connects |
 | 19 | loopback-bound node, `net_kernel:connect_node('other@<LAN IPv4>')`; the peer listens on `0.0.0.0:P` | `true`; dist socket `<LAN>:x` ↔ `<LAN>:P`; the peer's `rpc:call` back into the node returns the node's own OS pid |
-| 20 | 19, then `net_kernel:allow(['nobody@127.0.0.1'])` | `connect_node` → `false` |
+| 20 | 19, then `net_kernel:allow(['nobody@127.0.0.1'])` | `connect_node` → `false`; the node reports `Connection attempt with disallowed node` |
 | 21 | the IPv6 example verbatim: `-proto_dist inet6_tcp -name mynode@::1`, `{0,0,0,0,0,0,0,1}`, `-env ERL_EPMD_ADDRESS ::1` | listener `::1:P`; `epmd` answers on `127.0.0.1` and `::1` only |
 | 22 | IPv6 shell `erl -proto_dist inet6_tcp -name shell@::1 -dist_listen false -remsh mynode@::1`; an IPv4-carrier client | remote prompt, no listening socket; IPv4-carrier client → `false` |
 | 23 | `-sname n` where the hostname is in neither `/etc/hosts` nor DNS + loopback listener | `inet:getaddr` → `{127,0,0,1}` (`inet:gethostbyname_self/2`); `connect_node` → `true` |
@@ -115,7 +120,9 @@ replace the cookie. Row 24 is not used in the text.
   LAN IPv4 and a global IPv6 address, IPv6 enabled. OTP 27 from the operating
   system's packages. Facts in this line that the script does not print (`ufw`,
   package origin) were checked by hand (`ufw status`) and are not in
-  `results/`.
+  `results/`. `results/otp27-host.txt` was produced by the earlier shell
+  version of the script (`measure.sh`, in the git history), which reported
+  the same rows through a pty; it was not rerun.
 - `run-docker.sh 27 28 29`: official images with `--network host`, so the same
   interfaces, addresses and firewall as the host.
 - `run-docker.sh --bridge 27 28 29`: the container's own network namespace
