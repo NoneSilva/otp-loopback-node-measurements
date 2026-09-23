@@ -11,12 +11,12 @@ the script that produced every row behind that text, the captured outputs per
 OTP version and network setup, and the list of what was deliberately not
 measured.
 
-Companion write-up of the case that motivated it (VS Code Erlang extension,
-GHSA-573p-mcvv-hchg): <https://erts-sched.github.io/security/vscode-erlang-loopback-rce/>
+The case that motivated it is the VS Code Erlang extension advisory
+GHSA-573p-mcvv-hchg: <https://github.com/pgourlain/vscode_erlang/security/advisories/GHSA-573p-mcvv-hchg>
 
-Companions: [otp-dist-tls-measurements](https://github.com/erts-sched/otp-dist-tls-measurements)
+Companions: [otp-dist-tls-measurements](https://github.com/NoneSilva/otp-dist-tls-measurements)
 (what `-proto_dist inet_tls` protects, and that it does not change the bind)
-and [elixir-ls-mcp-bind-measurements](https://github.com/erts-sched/elixir-ls-mcp-bind-measurements)
+and [elixir-ls-mcp-bind-measurements](https://github.com/NoneSilva/elixir-ls-mcp-bind-measurements)
 (the same bind question for the elixir-ls MCP server,
 [elixir-lsp/elixir-ls#1275](https://github.com/elixir-lsp/elixir-ls/pull/1275)).
 
@@ -145,7 +145,7 @@ host rules exist.
   (the client certificate authenticates before the cookie; the listener stays
   on `0.0.0.0`; `inet_dist_use_interface` applies to it unchanged) is measured
   in the companion
-  [otp-dist-tls-measurements](https://github.com/erts-sched/otp-dist-tls-measurements).
+  [otp-dist-tls-measurements](https://github.com/NoneSilva/otp-dist-tls-measurements).
 - Versions before OTP 27. The entry uses two features from OTP 23.0:
   `-dist_listen false` (the documented shell command) and `-remsh` without
   `-name` or `-sname` (the plain `erl -remsh n@localhost` and the "starts a
