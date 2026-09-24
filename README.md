@@ -2,7 +2,7 @@
 
 Measurements behind a documentation change proposed to Erlang/OTP,
 "kernel: document how to bind a distributed node to loopback"
-([erlang/otp#11617](https://github.com/erlang/otp/pull/11617), target
+(<https://github.com/erlang/otp/pull/11617>, target
 `maint`): with it, the `inet_dist_use_interface` entry of
 `lib/kernel/doc/kernel_app.md` explains how to make a distributed node accept
 connections only from the local host, what each of the involved settings does
@@ -18,7 +18,7 @@ Companions: [otp-dist-tls-measurements](https://github.com/NoneSilva/otp-dist-tl
 (what `-proto_dist inet_tls` protects, and that it does not change the bind)
 and [elixir-ls-mcp-bind-measurements](https://github.com/NoneSilva/elixir-ls-mcp-bind-measurements)
 (the same bind question for the elixir-ls MCP server,
-[elixir-lsp/elixir-ls#1275](https://github.com/elixir-lsp/elixir-ls/pull/1275)).
+<https://github.com/elixir-lsp/elixir-ls/pull/1275>).
 
 ## Run it
 
@@ -162,8 +162,9 @@ host rules exist.
 
 `epmd` adds the loopback address of both families when given an address
 (row 15). On a host with IPv6 disabled, OTP 27.3.4.15, 28.5.0.4 and 29.0.4 fail
-to start such an `epmd` because the `::1` bind fails (erlang/otp#11402, fixed
-in the next patch of each branch). Not part of this repository's runs, which
+to start such an `epmd` because the `::1` bind fails
+(<https://github.com/erlang/otp/issues/11402>, fixed in the next patch of each
+branch). Not part of this repository's runs, which
 all have IPv6 enabled.
 
 ## References
